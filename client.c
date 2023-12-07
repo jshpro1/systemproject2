@@ -16,6 +16,7 @@ GtkWidget *input_entry;
 
 int client_socket;
 
+// 텍스트를 채팅창에 추가하는 함수
 void append_text_to_chat(const char *text) {
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(chat_view));
     GtkTextIter iter;
@@ -24,6 +25,7 @@ void append_text_to_chat(const char *text) {
     gtk_text_buffer_insert(buffer, &iter, "\n", -1);
 }
 
+// 메시지 수신 콜백 함수
 gboolean receive_message(GIOChannel *source, GIOCondition condition, gpointer data) {
     char buffer[BUFFER_SIZE];
     ssize_t read_size = read(client_socket, buffer, sizeof(buffer));
@@ -40,6 +42,7 @@ gboolean receive_message(GIOChannel *source, GIOCondition condition, gpointer da
     return TRUE;
 }
 
+// 파일 전송 함수
 void send_file(int server_socket, const char *file_path) {
     char buffer[BUFFER_SIZE];
     ssize_t read_size;
@@ -64,7 +67,7 @@ void send_file(int server_socket, const char *file_path) {
     write(server_socket, &file_size, sizeof(off_t));
 
     // 파일 데이터 전송
-    lseek(file_fd, 0, SEEK_SET); // 파일 포인터를 다시 파일의 시작으로 이동
+    lseek(file_fd, 0, SEEK_SET);
     while ((read_size = read(file_fd, buffer, sizeof(buffer))) > 0) {
         write(server_socket, buffer, read_size);
     }
@@ -72,6 +75,7 @@ void send_file(int server_socket, const char *file_path) {
     close(file_fd);
 }
 
+// 메시지 전송 함수
 void send_message(GtkWidget *widget, gpointer data) {
     const char *message = gtk_entry_get_text(GTK_ENTRY(input_entry));
     if (strlen(message) > 0) {
@@ -88,6 +92,7 @@ void send_message(GtkWidget *widget, gpointer data) {
     }
 }
 
+// 메인 함수
 int main(int argc, char **argv) {
     gtk_init(&argc, &argv);
 

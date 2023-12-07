@@ -12,58 +12,55 @@
 #define BUFFER_SIZE 1024
 #define MAX_CLIENTS 10
 
-int clients[MAX_CLIENTS] = {0};
+typedef struct {
+    int socket;
+    char username[50];
+} Client;
 
-// 파일 수신 함수
-void receive_file(int client_socket, const char *file_name) {
-    char buffer[BUFFER_SIZE];
-    int file_fd = open(file_name, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-    if (file_fd == -1) {
-        perror("파일 열기 실패");
-        return;
-    }
+Client clients[MAX_CLIENTS] = {{0, ""}};
 
-    ssize_t read_size;
-    while ((read_size = read(client_socket, buffer, sizeof(buffer))) > 0) {
-        if (write(file_fd, buffer, read_size) == -1) {
-            perror("파일 쓰기 실패");
-            close(file_fd);
-            return;
+// 모든 클라이언트에게 메시지 방송
+void broadcast_message_to_all(const char *message) {
+    for (int i = 0; i < MAX_CLIENTS; ++i) {
+        if (clients[i].socket != 0) {
+            write(clients[i].socket, message, strlen(message));
         }
     }
-
-    close(file_fd);
 }
 
-// 클라이언트 핸들링 함수에 파일 수신 호출 추가
-void handle_client(int client_socket) {
+// 클라이언트 처리 함수
+void handle_client(Client client) {
     char buffer[BUFFER_SIZE];
     ssize_t read_size;
 
-    while ((read_size = read(client_socket, buffer, sizeof(buffer))) > 0) {
+    // 사용자 등록
+    read(client.socket, client.username, sizeof(client.username));
+    printf("클라이언트 등록: %s\n", client.username);
+
+    // 새로운 사용자가 입장했음을 알림
+    char join_message[150];
+    snprintf(join_message, sizeof(join_message), "%s 님이 입장하셨습니다.", client.username);
+    broadcast_message_to_all(join_message);
+
+    while ((read_size = read(client.socket, buffer, sizeof(buffer))) > 0) {
         buffer[read_size] = '\0';
 
-        // 클라이언트로부터 받은 메시지를 모든 클라이언트에게 방송
-        printf("클라이언트: %s", buffer);
-
-        // 파일 전송을 위한 프로토콜 추가
-        if (strcmp(buffer, "FILE_TRANSFER_REQUEST") == 0) {
-            // 클라이언트가 파일 전송을 요청했음을 알림
-            read(client_socket, buffer, sizeof(buffer));
-            printf("클라이언트가 파일을 전송합니다: %s\n", buffer);
-            receive_file(client_socket, buffer);
-            printf("파일 전송이 완료되었습니다.\n");
-        }
-
-        for (int i = 0; i < MAX_CLIENTS; ++i) {
-            if (clients[i] != 0 && clients[i] != client_socket) {
-                write(clients[i], buffer, read_size);
-            }
-        }
+        // 채팅 메시지를 모든 클라이언트에게 방송
+        char broadcast_message[150];
+        snprintf(broadcast_message, sizeof(broadcast_message), "%s: %s", client.username, buffer);
+        broadcast_message_to_all(broadcast_message);
     }
 
-    printf("클라이언트가 연결을 종료했습니다.\n");
-    close(client_socket);
+    // 클라이언트가 연결을 종료한 경우
+    printf("클라이언트가 연결을 종료했습니다: %s\n", client.username);
+
+    // 사용자가 퇴장했음을 알림
+    char leave_message[150];
+    snprintf(leave_message, sizeof(leave_message), "%s 님이 퇴장하셨습니다.", client.username);
+    broadcast_message_to_all(leave_message);
+
+    // 클라이언트 소켓 닫기
+    close(client.socket);
 }
 
 int main() {
@@ -102,27 +99,22 @@ int main() {
 
         printf("클라이언트가 연결되었습니다.\n");
 
+        // 새로운 클라이언트를 등록
+        Client new_client = {client_socket, ""};
         for (int i = 0; i < MAX_CLIENTS; ++i) {
-            if (clients[i] == 0) {
-                clients[i] = client_socket;
+            if (clients[i].socket == 0) {
+                clients[i] = new_client;
                 break;
             }
         }
 
         if (fork() == 0) {
             close(server_socket);
-            handle_client(client_socket);
-            close(client_socket);  // 파일 디스크립터 닫기 추가
+            handle_client(new_client);
+            close(client_socket);
             exit(EXIT_SUCCESS);
         } else {
             close(client_socket);
-        }
-
-        for (int i = 0; i < MAX_CLIENTS; ++i) {
-            if (clients[i] == client_socket) {
-                clients[i] = 0;
-                break;
-            }
         }
     }
 
